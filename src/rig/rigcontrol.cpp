@@ -31,6 +31,7 @@
 #include <QMessageBox>
 #include <QApplication>
 #ifdef _WIN32
+#include <winsock2.h>   // must come before windows.h (Hamlib also uses it)
 #include <windows.h>
 #else
 #include <sys/ioctl.h>
@@ -389,13 +390,13 @@ bool model_Sort(const rig_caps *caps1,const rig_caps *caps2)
 // Serial RTS/DTR PTT on Windows. Accepts "COM3" or "\\.\COM12".
 static HANDLE winPttHandle=INVALID_HANDLE_VALUE;
 
-static void winSetLines(bool ptt)
+static void winSetLines(bool ptt,const scatParams &cp)
 {
   if(winPttHandle==INVALID_HANDLE_VALUE) return;
-  if(catParams.activeDTR)  EscapeCommFunction(winPttHandle, ptt ? SETDTR : CLRDTR);
-  if(catParams.nactiveDTR) EscapeCommFunction(winPttHandle, ptt ? CLRDTR : SETDTR);
-  if(catParams.activeRTS)  EscapeCommFunction(winPttHandle, ptt ? SETRTS : CLRRTS);
-  if(catParams.nactiveRTS) EscapeCommFunction(winPttHandle, ptt ? CLRRTS : SETRTS);
+  if(cp.activeDTR)  EscapeCommFunction(winPttHandle, ptt ? SETDTR : CLRDTR);
+  if(cp.nactiveDTR) EscapeCommFunction(winPttHandle, ptt ? CLRDTR : SETDTR);
+  if(cp.activeRTS)  EscapeCommFunction(winPttHandle, ptt ? SETRTS : CLRRTS);
+  if(cp.nactiveRTS) EscapeCommFunction(winPttHandle, ptt ? CLRRTS : SETRTS);
 }
 #endif
 
@@ -421,9 +422,9 @@ void rigControl::activatePTT(bool b)
                                    QMessageBox::Ok);
               return;
             }
-          winSetLines(false);
+          winSetLines(false,catParams);
         }
-      winSetLines(b);
+      winSetLines(b,catParams);
     }
 #else
   int modemlines;

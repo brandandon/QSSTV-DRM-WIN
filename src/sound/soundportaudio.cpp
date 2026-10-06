@@ -27,6 +27,7 @@
 #include <QList>
 #include <QPair>
 #include <QThread>
+#include <cstring>
 
 #ifdef _WIN32
 #include <pa_win_wasapi.h>
