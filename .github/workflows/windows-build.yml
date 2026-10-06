@@ -92,7 +92,15 @@ jobs:
           cp "$EXE" dist/
           cp hamlib-install/bin/*.dll dist/
           WINDEPLOYQT=$(command -v windeployqt-qt5 || command -v windeployqt)
-          "$WINDEPLOYQT" --release --no-translations --no-opengl-sw dist/qsstv.exe
+          # MSYS2's Qt uses desktop OpenGL, so skip the ANGLE (libGLESv2) DLLs it doesn't ship
+          "$WINDEPLOYQT" --release --no-translations --no-opengl-sw --no-angle --no-system-d3d-compiler dist/qsstv.exe \
+            || echo "windeployqt reported a problem, checking the essentials by hand"
+          # make sure the plugins Qt cannot start without are there
+          QTPLUGINS=/mingw64/share/qt5/plugins
+          for d in platforms styles imageformats iconengines; do
+            if [ ! -d "dist/$d" ] && [ -d "$QTPLUGINS/$d" ]; then cp -r "$QTPLUGINS/$d" dist/; fi
+          done
+          test -f dist/platforms/qwindows.dll || { echo "qwindows.dll missing"; exit 1; }
           # copy the MinGW runtime DLLs used by the exe, Qt plugins and Hamlib (repeat until nothing new)
           for pass in 1 2 3 4; do
             find dist -name '*.exe' -o -name '*.dll' | while read f; do
