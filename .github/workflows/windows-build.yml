@@ -31,6 +31,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          suppress-deprecation-warnings: msystem-mingw64
           install: >-
             base-devel git autoconf automake libtool
             mingw-w64-x86_64-toolchain
@@ -56,14 +57,17 @@ jobs:
           git clone --depth 1 --branch "$HAMLIB_VERSION" https://github.com/Hamlib/Hamlib.git hamlib-src
           cd hamlib-src
           ./bootstrap
-          ./configure --prefix="$GITHUB_WORKSPACE/hamlib-install" --disable-static \
+          # Windows-style path with forward slashes (D:/a/...) works for both libtool and the compiler
+          WS=$(cygpath -m "$GITHUB_WORKSPACE")
+          ./configure --prefix="$WS/hamlib-install" --disable-static \
                       --without-cxx-binding --without-readline
           make -j4
           make install
 
       - name: Build the app
         run: |
-          export PKG_CONFIG_PATH="$GITHUB_WORKSPACE/hamlib-install/lib/pkgconfig:$PKG_CONFIG_PATH"
+          WS=$(cygpath -u "$GITHUB_WORKSPACE")
+          export PKG_CONFIG_PATH="$WS/hamlib-install/lib/pkgconfig:$PKG_CONFIG_PATH"
           mkdir build && cd build
           qmake ../src/qsstv.pro CONFIG+=release CONFIG-=debug_and_release
           mingw32-make -j4
@@ -74,7 +78,7 @@ jobs:
           EXE=$(find build -name qsstv.exe | head -1)
           echo "Built: $EXE"
           cp "$EXE" dist/
-          cp "$GITHUB_WORKSPACE"/hamlib-install/bin/*.dll dist/
+          cp hamlib-install/bin/*.dll dist/
           windeployqt --release --no-translations --no-opengl-sw dist/qsstv.exe
           # copy the MinGW runtime DLLs used by the exe, Qt plugins and Hamlib (repeat until nothing new)
           for pass in 1 2 3 4; do
