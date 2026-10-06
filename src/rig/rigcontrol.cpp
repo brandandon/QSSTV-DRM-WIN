@@ -30,9 +30,13 @@
 #include <QSplashScreen>
 #include <QMessageBox>
 #include <QApplication>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
+#endif
 
 
 #define MAXCONFLEN 128
@@ -381,8 +385,47 @@ bool model_Sort(const rig_caps *caps1,const rig_caps *caps2)
   return false;
 }
 
+#ifdef _WIN32
+// Serial RTS/DTR PTT on Windows. Accepts "COM3" or "\\.\COM12".
+static HANDLE winPttHandle=INVALID_HANDLE_VALUE;
+
+static void winSetLines(bool ptt)
+{
+  if(winPttHandle==INVALID_HANDLE_VALUE) return;
+  if(catParams.activeDTR)  EscapeCommFunction(winPttHandle, ptt ? SETDTR : CLRDTR);
+  if(catParams.nactiveDTR) EscapeCommFunction(winPttHandle, ptt ? CLRDTR : SETDTR);
+  if(catParams.activeRTS)  EscapeCommFunction(winPttHandle, ptt ? SETRTS : CLRRTS);
+  if(catParams.nactiveRTS) EscapeCommFunction(winPttHandle, ptt ? CLRRTS : SETRTS);
+}
+#endif
+
 void rigControl::activatePTT(bool b)
 {
+#ifdef _WIN32
+  if(catParams.enableSerialPTT)
+    {
+      if (catParams.pttSerialPort.isEmpty()) return;
+      if(winPttHandle==INVALID_HANDLE_VALUE)
+        {
+          QString port=catParams.pttSerialPort.trimmed();
+          if(!port.startsWith("\\\\.\\")) port="\\\\.\\"+port;
+          winPttHandle=CreateFileW((LPCWSTR)port.utf16(),GENERIC_READ|GENERIC_WRITE,0,nullptr,
+                                   OPEN_EXISTING,0,nullptr);
+          if(winPttHandle==INVALID_HANDLE_VALUE)
+            {
+              QMessageBox::warning(txWidgetPtr,"Serial Port Error",
+                                   QString("Unable to open serial port %1\ncheck Options->Configuration\n"
+                                           "The port may be in use by another program (close it there, or use CAT PTT).\n"
+                                           "If you do not have a serial port,\n"
+                                           "then disable -Serial PTT- option in the configuration").arg(catParams.pttSerialPort),
+                                   QMessageBox::Ok);
+              return;
+            }
+          winSetLines(false);
+        }
+      winSetLines(b);
+    }
+#else
   int modemlines;
   if(catParams.enableSerialPTT)
     {
@@ -432,6 +475,7 @@ void rigControl::activatePTT(bool b)
             }
         }
     }
+#endif
   else if(catParams.enableXMLRPC)
     {
       xmlIntfPtr->activatePTT(b);

@@ -24,9 +24,13 @@
 #include "logging.h"
 #include "dispatch/dispatcher.h"
 #include "ui_mainwindow.h"
-#include "soundpulse.h"
-#ifndef __APPLE__
-#  include "soundalsa.h"
+#ifdef USE_PORTAUDIO
+#  include "soundportaudio.h"
+#else
+#  include "soundpulse.h"
+#  ifndef __APPLE__
+#    include "soundalsa.h"
+#  endif
 #endif
 #include "configdialog.h"
 #include "configparams.h"
@@ -61,6 +65,8 @@ mainWindow::mainWindow(QWidget *parent) : QMainWindow(parent),  ui(new Ui::MainW
   inStartup=true;
   QApplication::instance()->thread()->setObjectName("qsstv_main");
   wfTextPushButton=new QPushButton("WF Text",this);
+  wfImagePushButton=new QPushButton("WF Image",this);
+  wfImagePushButton->setToolTip("Send a small picture in the waterfall");
   bsrPushButton=new QPushButton("BSR",this);
   setObjectName("mainThread");
   freqComboBox=new QComboBox(this);
@@ -96,6 +102,7 @@ mainWindow::mainWindow(QWidget *parent) : QMainWindow(parent),  ui(new Ui::MainW
   ui->statusBar->addPermanentWidget(freqDisplay);
   ui->statusBar->addPermanentWidget(freqComboBox);
   ui->statusBar->addPermanentWidget(wfTextPushButton);
+  ui->statusBar->addPermanentWidget(wfImagePushButton);
   ui->statusBar->addPermanentWidget(bsrPushButton);
   ui->statusBar->addPermanentWidget(idPushButton);
   ui->statusBar->addPermanentWidget(cwPushButton);
@@ -114,12 +121,16 @@ mainWindow::mainWindow(QWidget *parent) : QMainWindow(parent),  ui(new Ui::MainW
   txWidgetPtr=ui->txWindow;
   galleryWidgetPtr=ui->galleryWindow;
   readSettings();
+#if defined(USE_PORTAUDIO)
+  soundIOPtr=new soundPortAudio;
+#else
 #ifndef __APPLE__
   if(pulseSelected)
 #endif
     soundIOPtr=new soundPulse;
 #ifndef __APPLE__
   else  soundIOPtr=new soundAlsa;
+#endif
 #endif
   dispatcherPtr=new dispatcher;
   waterfallPtr=new waterfallText;
@@ -140,6 +151,7 @@ mainWindow::mainWindow(QWidget *parent) : QMainWindow(parent),  ui(new Ui::MainW
   connect(bsrPushButton, SIGNAL(clicked()), this, SLOT(slotSendBSR()));
   connect(freqComboBox,SIGNAL(activated(int)),SLOT(slotSetFrequency(int)));
   connect(wfTextPushButton, SIGNAL(clicked()), this, SLOT(slotSendWfText()));
+  connect(wfImagePushButton, SIGNAL(clicked()), this, SLOT(slotSendWfImage()));
   connect(rxWidgetPtr,SIGNAL(modeSwitch(int)),this, SLOT(slotModeChange(int)));
   connect(txWidgetPtr,SIGNAL(modeSwitch(int)),this, SLOT(slotModeChange(int)));
 
@@ -229,12 +241,16 @@ void mainWindow::restartSound(bool inStartUp)
       delete soundIOPtr;
       soundIOPtr=nullptr;
     }
+#if defined(USE_PORTAUDIO)
+  soundIOPtr=new soundPortAudio;
+#else
 #ifndef __APPLE__
   if(pulseSelected)
 #endif
     soundIOPtr=new soundPulse;
 #ifndef __APPLE__
-  else soundIOPtr=new soundAlsa;
+  else  soundIOPtr=new soundAlsa;
+#endif
 #endif
   if(!soundIOPtr->init(BASESAMPLERATE))
     {
@@ -482,6 +498,11 @@ void mainWindow::slotSendCWID()
 void mainWindow::slotSendWfText()
 {
   txWidgetPtr->sendWfText();
+}
+
+void mainWindow::slotSendWfImage()
+{
+  txWidgetPtr->sendWfImage();
 }
 
 void mainWindow::slotSetFrequency(int freqIndex)

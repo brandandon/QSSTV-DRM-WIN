@@ -44,6 +44,7 @@ private slots:
   void slotSendCWID();
   void slotSendBSR();
   void slotSendWfText();
+  void slotSendWfImage();
   void slotSetFrequency(int freqIndex);
 
 
@@ -68,6 +69,7 @@ private:
 //  void setupFtp(ftpThread *&ptr, QString idName);
   QComboBox *transmissionModeComboBox;
   QPushButton *wfTextPushButton;
+  QPushButton *wfImagePushButton;
   QPushButton *fixPushButton;
   QPushButton *bsrPushButton;
   QPushButton *idPushButton;

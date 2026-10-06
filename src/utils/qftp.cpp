@@ -47,7 +47,8 @@
 #include "qftp.h"
 #include "qabstractsocket.h"
 
-#ifndef QT_NO_FTP
+// QT_NO_FTP guard removed: this is a bundled copy of QFtp and must always build
+#if 1
 
 #include "qcoreapplication.h"
 #include "qtcpsocket.h"

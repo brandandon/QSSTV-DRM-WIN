@@ -24,9 +24,26 @@ INCLUDEPATH += config dispatch drmrx drmtx dsp editor logbook mainwidgets rig sc
 #QMAKE_LIBDIR += $$[QT_SYSROOT]/usr/local/lib
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libopenjp2 fftw3 libpulse libpulse-simple hamlib
+PKGCONFIG += libopenjp2 fftw3 hamlib
+
+# ---- audio backend -------------------------------------------------------
+# Windows always uses PortAudio (WASAPI). On Linux/macOS it can be selected
+# with:  qmake CONFIG+=portaudio
+win32: CONFIG += portaudio
+portaudio {
+  DEFINES += USE_PORTAUDIO
+  SOURCES += sound/soundportaudio.cpp
+  HEADERS += sound/soundportaudio.h
+  PKGCONFIG += portaudio-2.0
+} else {
+  PKGCONFIG += libpulse libpulse-simple
+  SOURCES += sound/soundpulse.cpp
+  HEADERS += sound/soundpulse.h
+  LIBS += -lpulse -lpulse-simple
+}
+# --------------------------------------------------------------------------
 TARGET = qsstv
-macx {
+macx|win32 {
  # Enable pkg-config (pkg-config is disabled by default in the Qt package for mac)
  QT_CONFIG -= no-pkg-config
 }
@@ -46,7 +63,6 @@ SOURCES += main.cpp\
     config/directoriesconfig.cpp \
     config/configdialog.cpp \
     sound/soundbase.cpp \
-    sound/soundpulse.cpp \
     widgets/spectrumwidget.cpp \
     widgets/vumeter.cpp \
     widgets/fftdisplay.cpp \
@@ -193,7 +209,7 @@ SOURCES += main.cpp\
     editor/basegraphicitem.cpp \
     editor/templateviewer.cpp
 
-!macx: SOURCES += sound/soundalsa.cpp \
+unix:!macx: SOURCES += sound/soundalsa.cpp \
     videocapt/cameradialog.cpp \
     videocapt/imagesettings.cpp \
     videocapt/v4l2control.cpp \
@@ -215,7 +231,6 @@ HEADERS  += mainwindow.h \
     appdefs.h \
     config/configdialog.h \
     sound/soundbase.h \
-    sound/soundpulse.h \
     widgets/spectrumwidget.h \
     widgets/vumeter.h \
     widgets/fftdisplay.h \
@@ -365,7 +380,7 @@ HEADERS  += mainwindow.h \
     editor/basegraphicitem.h \
     editor/templateviewer.h
 
-!macx: HEADERS +=  sound/soundalsa.h \
+unix:!macx: HEADERS +=  sound/soundalsa.h \
     videocapt/cameradialog.h \
     videocapt/imagesettings.h \
     videocapt/v4l2control.h \
@@ -411,7 +426,7 @@ FORMS += mainwindow.ui \
     widgets/testpatternselection.ui \
     editor/templateviewer.ui
 
-!macx: FORMS += videocapt/cameradialog.ui \
+unix:!macx: FORMS += videocapt/cameradialog.ui \
     videocapt/imagesettings.ui
 
 
@@ -590,13 +605,11 @@ DISTFILES += \
 
 INSTALLS += target
 
-LIBS +=  -lpulse \
-         -lpulse-simple \
-         -lfftw3f \
+LIBS +=  -lfftw3f \
          -lfftw3 \
          -lhamlib
 
-!macx: LIBS +=  -lasound \
+unix:!macx: LIBS +=  -lasound \
          -lv4l2 \
          -lv4lconvert \
          -lrt
@@ -612,6 +625,13 @@ HEADERS  += scope/scopeoffset.h \
 FORMS   += scope/scopeoffset.ui \
                 scope/plotform.ui
 
-!macx: INCLUDEPATH += /usr/include/qwt /usr/include/qt5/qwt
-!macx: LIBS += -lqwt-qt5
+unix:!macx: INCLUDEPATH += /usr/include/qwt /usr/include/qt5/qwt
+unix:!macx: LIBS += -lqwt-qt5
+}
+
+# ---- Windows ---------------------------------------------------------------
+win32 {
+  RC_ICONS = icons/qsstv.ico
+  # ws2_32 for the network code, winmm/ole32 are needed by PortAudio's WASAPI backend
+  LIBS += -lws2_32 -lwinmm -lole32 -luuid -lksuser
 }

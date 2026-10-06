@@ -10,12 +10,20 @@
 #include "math.h"
 
 #include <QPainter>
+#include <QFileInfo>
 #include <QDebug>
 
 //#define FREQ_AMPLITUDE 16E3
 #define FREQ_AMPLITUDE 6E3
 #define FREQ_OFFSET 300.0
 #define FREQ_MAX 2600.
+
+// Waterfall pictures: "img:<path>" anywhere a waterfall text is accepted
+// (WF Text dialog, start/end-of-transmission texts) sends a picture instead.
+#define WF_IMAGE_PREFIX "img:"
+#define WF_IMAGE_MAXLINES 80      // ~10 s of transmit time (each line is 0.128 s)
+#define WF_IMAGE_DYNRANGE_DB 30.0 // brightness range shown on a typical waterfall
+#define WF_IMAGE_BLACK 0.08       // darker than this is not transmitted at all
 
 
 waterfallText::waterfallText()
@@ -114,10 +122,14 @@ DSPFLOAT * waterfallText::nextLine()
     for(i=0;i<imageWidth;i++)
     {
       freqIndex=i+startFreqIndex;
-      if((cPtr[i]&0xffffff)!=0)
+      double g=qGray(cPtr[i])/255.;
+      if(g>WF_IMAGE_BLACK)
       {
-        dataBuffer[freqIndex][0]= phr[i];
-        dataBuffer[freqIndex][1]= phi[i];
+        // waterfalls display power in dB, so map brightness logarithmically.
+        // Pure white gives the same amplitude as the original on/off text.
+        double gain=pow(10.,(g-1.)*WF_IMAGE_DYNRANGE_DB/20.);
+        dataBuffer[freqIndex][0]= phr[i]*gain;
+        dataBuffer[freqIndex][1]= phi[i]*gain;
       }
     }
     fftw_execute(plan);
@@ -132,8 +144,47 @@ DSPFLOAT * waterfallText::nextLine()
 
 
 
+bool waterfallText::isImageText(const QString &txt)
+{
+  return txt.trimmed().startsWith(WF_IMAGE_PREFIX,Qt::CaseInsensitive);
+}
+
+bool waterfallText::setupPicture(QString fileName)
+{
+  QImage src;
+  dLine=0;
+  fileName=fileName.trimmed();
+  if(fileName.startsWith('"') && fileName.endsWith('"') && fileName.length()>1)
+    fileName=fileName.mid(1,fileName.length()-2);
+  if(!src.load(fileName) || src.isNull())
+  {
+    addToLog(QString("waterfall picture not loaded: %1").arg(fileName),LOGSYNTHES);
+    return false;
+  }
+  // one column per FFT bin; keep the aspect ratio but limit the length
+  width=imageWidth;
+  height=qRound((double)src.height()*width/src.width());
+  if(height<1) height=1;
+  if(height>WF_IMAGE_MAXLINES) height=WF_IMAGE_MAXLINES;
+  QImage scaled=src.convertToFormat(QImage::Format_ARGB32)
+                   .scaled(width,height,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
+  image=QImage(QSize(width,height),QImage::Format_ARGB32_Premultiplied);
+  image.fill(Qt::black);
+  QPainter p(&image);   // flattens any transparency onto black (= no signal)
+  p.drawImage(0,0,scaled);
+  p.end();
+  line=image.height();
+  return true;
+}
+
 void waterfallText::setupImage(QString txt)
 {
+  if(isImageText(txt))
+  {
+    QString fn=txt.trimmed().mid(QString(WF_IMAGE_PREFIX).length());
+    if(setupPicture(fn)) return;
+    txt=QFileInfo(fn.trimmed()).fileName()+"?"; // fall back to text so the operator notices
+  }
   QRect rct;
   QPainter p;
   QPen pen;

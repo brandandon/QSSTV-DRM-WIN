@@ -4,6 +4,15 @@
 #include "appglobal.h"
 
 
+#ifdef _WIN32
+// System V message queues (used to pass QSOs to xlog) do not exist on Windows.
+// The logbook link is simply disabled there.
+ipcMessage::ipcMessage(int messageKey) {key=messageKey; messageQId=-1; rc=0; done=0;}
+ipcMessage::~ipcMessage() {}
+bool ipcMessage::sendMessage(QString) {return false;}
+bool ipcMessage::receiveMessage(QString &) {return false;}
+bool ipcMessage::closeQueue() {return true;}
+#else
 #include<string.h>
 #include<time.h>
 #include<sys/ipc.h>
@@ -78,3 +87,4 @@ bool ipcMessage::closeQueue()
     }
   return 0;
 }
+#endif // _WIN32

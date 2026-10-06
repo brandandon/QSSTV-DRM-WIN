@@ -76,6 +76,7 @@ public:
   //  void sendFIX();
   void sendBSR();
   void sendWfText();
+  void sendWfImage();
   void sendWFID();
   void sendCWID();
 

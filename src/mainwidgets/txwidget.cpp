@@ -10,10 +10,14 @@
 #include "supportfunctions.h"
 #include "gallerywidget.h"
 #include "waterfalltext.h"
+#include <QFileDialog>
+#include <QSettings>
 
 #include "ui_freqform.h"
 #include "ui_sweepform.h"
-#include "cameradialog.h"
+#ifndef _WIN32
+#include "cameradialog.h"  // webcam capture uses Video4Linux, not available on Windows
+#endif
 #include "soundbase.h"
 #include "waterfallform.h"
 #include "bsrform.h"
@@ -471,6 +475,19 @@ void txWidget::sendWfText()
     }
 }
 
+void txWidget::sendWfImage()
+{
+  QSettings qSettings;
+  QString dir=qSettings.value("WATERFALL/lastImageDir",txStockImagesPath).toString();
+  QString fn=QFileDialog::getOpenFileName(this,"Waterfall picture",dir,
+                                          "Images (*.png *.jpg *.jpeg *.bmp *.gif)");
+  if(fn.isEmpty()) return;
+  qSettings.setValue("WATERFALL/lastImageDir",QFileInfo(fn).absolutePath());
+  waterfallPtr->setText("img:"+fn);
+  dispatcherPtr->startTX(txFunctions::TXSENDWFID);
+  addToLog("sendWfImage",LOGTXMAIN);
+}
+
 void txWidget::slotStop()
 {
   ui->startToolButton->setEnabled(true);
@@ -656,7 +673,7 @@ void txWidget::slotResizeChanged(int i)
 
 void txWidget::slotSnapshot()
 {
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(_WIN32)
   QImage *im;
   cameraDialog camera;
   if(camera.exec()==QDialog::Accepted)

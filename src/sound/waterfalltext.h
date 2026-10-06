@@ -22,7 +22,9 @@ public:
  DSPFLOAT *nextLine();
  int getLength() {return fftLength;}
  double getDuration(QString txt=QString());
+ static bool isImageText(const QString &txt);
 private:
+  bool setupPicture(QString fileName);
   int fftLength;
   int samplingrate;
   fftw_complex *out;

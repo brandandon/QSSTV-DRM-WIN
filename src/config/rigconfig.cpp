@@ -28,6 +28,12 @@
 #include <QSettings>
 #include <QMessageBox>
 
+#ifdef _WIN32
+#define DEFAULT_SERIAL_PORT "COM1"
+#else
+#define DEFAULT_SERIAL_PORT "/dev/ttyS0"
+#endif
+
 
 rigConfig::rigConfig(QWidget *parent) : baseConfig(parent),  ui(new Ui::rigConfig)
 {
@@ -60,7 +66,7 @@ void rigConfig::readSettings()
   cp=rigController->params();
   QSettings qSettings;
   qSettings.beginGroup(cp->configLabel);
-  cp->serialPort=qSettings.value("serialPort","/dev/ttyS0").toString();
+  cp->serialPort=qSettings.value("serialPort",DEFAULT_SERIAL_PORT).toString();
   cp->radioModel=qSettings.value("radioModel","dummy").toString();
   cp->civAddress=qSettings.value("civAddress","").toString();
   cp->baudrate=qSettings.value("baudrate",9600).toInt();
@@ -70,7 +76,7 @@ void rigConfig::readSettings()
   cp->handshake=qSettings.value("handshake","None").toString();
   cp->enableCAT=qSettings.value("enableCAT",0).toBool();
   cp->enableSerialPTT=qSettings.value("enableSerialPTT",0).toBool();
-  cp->pttSerialPort=qSettings.value("pttSerialPort","/dev/ttyS0").toString();
+  cp->pttSerialPort=qSettings.value("pttSerialPort",DEFAULT_SERIAL_PORT).toString();
   cp->activeRTS=qSettings.value("activeRTS",1).toBool();
   cp->activeDTR=qSettings.value("activeDTR",0).toBool();
   cp->nactiveRTS=qSettings.value("nactiveRTS",1).toBool();
