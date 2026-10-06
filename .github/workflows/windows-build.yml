@@ -44,9 +44,9 @@ jobs:
             mingw-w64-x86_64-portaudio
             mingw-w64-x86_64-libusb
 
-      - name: Cache Hamlib
+      - name: Restore Hamlib from cache
         id: hamlib-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: hamlib-install
           key: hamlib-${{ env.HAMLIB_VERSION }}-mingw64
@@ -64,12 +64,24 @@ jobs:
           make -j4
           make install
 
+      # saved right away, so later runs skip the 10-minute Hamlib build even if the app build fails
+      - name: Save Hamlib to cache
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: hamlib-install
+          key: hamlib-${{ env.HAMLIB_VERSION }}-mingw64
+
       - name: Build the app
         run: |
           WS=$(cygpath -u "$GITHUB_WORKSPACE")
           export PKG_CONFIG_PATH="$WS/hamlib-install/lib/pkgconfig:$PKG_CONFIG_PATH"
+          # MSYS2 names the Qt 5 tools qmake-qt5 / windeployqt-qt5
+          QMAKE=$(command -v qmake-qt5 || command -v qmake || true)
+          if [ -z "$QMAKE" ]; then echo "qmake not found. Qt tools present:"; ls /mingw64/bin | grep -iE 'qmake|deployqt'; exit 1; fi
+          echo "Using $QMAKE"
           mkdir build && cd build
-          qmake ../src/qsstv.pro CONFIG+=release CONFIG-=debug_and_release
+          "$QMAKE" ../src/qsstv.pro CONFIG+=release CONFIG-=debug_and_release
           mingw32-make -j4
 
       - name: Collect the program and every DLL it needs
@@ -79,7 +91,8 @@ jobs:
           echo "Built: $EXE"
           cp "$EXE" dist/
           cp hamlib-install/bin/*.dll dist/
-          windeployqt --release --no-translations --no-opengl-sw dist/qsstv.exe
+          WINDEPLOYQT=$(command -v windeployqt-qt5 || command -v windeployqt)
+          "$WINDEPLOYQT" --release --no-translations --no-opengl-sw dist/qsstv.exe
           # copy the MinGW runtime DLLs used by the exe, Qt plugins and Hamlib (repeat until nothing new)
           for pass in 1 2 3 4; do
             find dist -name '*.exe' -o -name '*.dll' | while read f; do
