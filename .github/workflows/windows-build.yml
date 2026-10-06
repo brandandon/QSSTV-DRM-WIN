@@ -1,0 +1,117 @@
+# Builds the Windows version and a one-click installer on GitHub's servers.
+# Runs on every push, or by hand from the Actions tab ("Run workflow").
+# Pushing a tag like v1.0.0 also publishes the installer as a GitHub Release.
+
+name: Windows build
+
+on:
+  push:
+    branches: [ "**" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+env:
+  HAMLIB_VERSION: "4.7.2"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Get the source
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (compiler and libraries)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel git autoconf automake libtool
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-qt5-base
+            mingw-w64-x86_64-qt5-svg
+            mingw-w64-x86_64-qt5-tools
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-openjpeg2
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-libusb
+
+      - name: Cache Hamlib
+        id: hamlib-cache
+        uses: actions/cache@v4
+        with:
+          path: hamlib-install
+          key: hamlib-${{ env.HAMLIB_VERSION }}-mingw64
+
+      - name: Build Hamlib (radio control)
+        if: steps.hamlib-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$HAMLIB_VERSION" https://github.com/Hamlib/Hamlib.git hamlib-src
+          cd hamlib-src
+          ./bootstrap
+          ./configure --prefix="$GITHUB_WORKSPACE/hamlib-install" --disable-static \
+                      --without-cxx-binding --without-readline
+          make -j4
+          make install
+
+      - name: Build the app
+        run: |
+          export PKG_CONFIG_PATH="$GITHUB_WORKSPACE/hamlib-install/lib/pkgconfig:$PKG_CONFIG_PATH"
+          mkdir build && cd build
+          qmake ../src/qsstv.pro CONFIG+=release CONFIG-=debug_and_release
+          mingw32-make -j4
+
+      - name: Collect the program and every DLL it needs
+        run: |
+          mkdir -p dist
+          EXE=$(find build -name qsstv.exe | head -1)
+          echo "Built: $EXE"
+          cp "$EXE" dist/
+          cp "$GITHUB_WORKSPACE"/hamlib-install/bin/*.dll dist/
+          windeployqt --release --no-translations --no-opengl-sw dist/qsstv.exe
+          # copy the MinGW runtime DLLs used by the exe, Qt plugins and Hamlib (repeat until nothing new)
+          for pass in 1 2 3 4; do
+            find dist -name '*.exe' -o -name '*.dll' | while read f; do
+              ldd "$f" | awk '{print $3}' | grep -i '^/mingw64/bin/' || true
+            done | sort -u | while read dll; do
+              [ -f "dist/$(basename "$dll")" ] || cp "$dll" dist/
+            done
+          done
+          cp LICENSE dist/LICENSE.txt
+          cp installer/README-WINDOWS.txt dist/
+          ls dist
+
+      - name: Work out the version number
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") { $v = "${{ github.ref_name }}".TrimStart("v") }
+          else { $v = "0.0.${{ github.run_number }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Make the installer
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y --no-progress }
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" installer\qsstv-windows.iss
+
+      - name: Keep the installer (download it from the run's Summary page)
+        uses: actions/upload-artifact@v4
+        with:
+          name: QSSTV-Windows-Setup-${{ steps.ver.outputs.version }}
+          path: installer/Output/*.exe
+
+      - name: Publish a release (tags only)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/*.exe
